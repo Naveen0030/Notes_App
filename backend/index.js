@@ -35,45 +35,73 @@ app.get("/", (req, res) => {
 
 // Create Account
 app.post("/create-account", async (req,res) => {
+    try {
+        const { fullName, email, password } = req.body;
 
-    const { fullName, email, password } = req.body;
+        if(!fullName || !fullName.trim()){
+            return res.status(400).json({ error: true, message: "Full Name is Required!!"});
+        }
+        if(!email || !email.trim()){
+            return res.status(400).json({ error: true, message: "Email is Required!!"});
+        }
+        if(!password || password.length < 6){
+            return res.status(400).json({ error: true, message: "Password must be at least 6 characters long!!"});
+        }
 
-    if(!fullName){
-        return res.status(400).json({ error: true, message: "Full Name is Required!!"});
-    }
-    if(!email){
-        return res.status(400).json({ error: true, message: "Email is Required!!"});
-    }
-    if(!password){
-        return res.status(400).json({ error: true, message: "Password is Required!!"});
-    }
+        // Check if user already exists
+        const isUser = await User.findOne({ email: email.trim().toLowerCase() });
+        if(isUser){
+            return res.status(409).json({
+                error: true,
+                message: "User Already Exists",
+            });
+        }
 
-    const isUser = await User.findOne({ email: email});
-    if(isUser){
-        return res.json({
-            error: true,
-            message: "User Already Exist",
+        const user = new User({
+            fullName: fullName.trim(),
+            email: email.trim().toLowerCase(),
+            password,
+        });
+
+        await user.save();
+
+        const accessToken = jwt.sign({ user }, process.env.ACCESS_TOKEN_SECRET, {
+            expiresIn : "36000m",
+        });
+        
+        return res.status(201).json({
+            error: false,
+            user: {
+                _id: user._id,
+                fullName: user.fullName,
+                email: user.email,
+                createdOn: user.createdOn
+            },
+            accessToken,
+            message: "Registration Successful",
+        });
+    } catch (error) {
+        console.error("Signup error:", error);
+        
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ 
+                error: true, 
+                message: "Validation error. Please check your input." 
+            });
+        }
+        
+        if (error.code === 11000) {
+            return res.status(409).json({ 
+                error: true, 
+                message: "An account with this email already exists." 
+            });
+        }
+        
+        return res.status(500).json({ 
+            error: true, 
+            message: "Internal server error. Please try again later." 
         });
     }
-
-    const user = new User({
-        fullName,
-        email,
-        password,
-    });
-
-    await user.save();
-
-    const accessToken = jwt.sign({ user
-        }, process.env.ACCESS_TOKEN_SECRET, {
-        expiresIn : "36000m",
-    });
-    return res.json({
-        error: false,
-        user,
-        accessToken,
-        message: "Registration SuccessFul",
-    });
 });
 
 // Login Account
